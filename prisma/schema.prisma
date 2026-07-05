@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SEEKER
+  EMPLOYER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+enum JobStatus {
+  DRAFT
+  OPEN
+  PAUSED
+  CLOSED
+  FILLED
+}
+
+enum LocationType {
+  REMOTE
+  HYBRID
+  ONSITE
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  VIEWED
+  SHORTLISTED
+  REJECTED
+  WITHDRAWN
+  HIRED
+}
+
+model User {
+  id                 String                   @id @default(cuid())
+  clerkId            String                   @unique
+  email              String                   @unique
+  role               UserRole                 @default(SEEKER)
+  status             UserStatus               @default(ACTIVE)
+  // Post-MVP Phase 6: .edu verification (populated from Clerk verified emails)
+  eduVerified        Boolean                  @default(false)
+  eduEmail           String?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  seekerProfile      SeekerProfile?
+  employerProfile    EmployerProfile?
+  applications       Application[]
+  budgetEntries      ApplicationBudgetEntry[]
+  companyMemberships CompanyMember[]
+  sentInvites        EmployerInvite[]
+}
+
+model SeekerProfile {
+  userId     String   @id
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headline   String
+  bio        String?
+  skills     String[]
+  // Storage key within the private resume store — never a public URL.
+  resumeKey  String?
+  // SHA-256 of the resume file, used for cross-account dedup flagging.
+  resumeHash String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([resumeHash])
+}
+
+model EmployerProfile {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String?
+  createdAt DateTime @default(now())
+}
+
+model Company {
+  id          String          @id @default(cuid())
+  name        String
+  slug        String          @unique
+  website     String?
+  description String?
+  logoUrl     String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  members     CompanyMember[]
+  jobs        Job[]
+}
+
+model CompanyMember {
+  id        String   @id @default(cuid())
+  companyId String
+  userId    String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([companyId, userId])
+  @@index([userId])
+}
+
+// Invite-only employer onboarding (MVP policy).
+model EmployerInvite {
+  id          String    @id @default(cuid())
+  email       String
+  token       String    @unique
+  companyName String?
+  invitedById String
+  invitedBy   User      @relation(fields: [invitedById], references: [id])
+  acceptedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  @@index([email])
+}
+
+model Job {
+  id              String        @id @default(cuid())
+  companyId       String
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  title           String
+  description     String
+  status          JobStatus     @default(DRAFT)
+  locationType    LocationType  @default(REMOTE)
+  location        String?
+  salaryMin       Int?
+  salaryMax       Int?
+  employmentType  String        @default("Full-time")
+  maxApplications Int           @default(50)
+  publishedAt     DateTime?
+  closesAt        DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  applications    Application[]
+  capState        JobCapState?
+
+  @@index([status, publishedAt])
+  @@index([companyId])
+}
+
+model JobCapState {
+  jobId            String    @id
+  job              Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  applicationCount Int       @default(0)
+  isPaused         Boolean   @default(false)
+  pausedAt         DateTime?
+  reopenedAt       DateTime?
+  reopenCount      Int       @default(0)
+}
+
+model Application {
+  id              String            @id @default(cuid())
+  jobId           String
+  seekerId        String
+  job             Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  seeker          User              @relation(fields: [seekerId], references: [id], onDelete: Cascade)
+  intentStatement String
+  status          ApplicationStatus @default(SUBMITTED)
+  // Client-generated key to make apply submissions replay-safe.
+  idempotencyKey  String?           @unique
+  submittedAt     DateTime          @default(now())
+  respondedAt     DateTime?
+  withdrawnAt     DateTime?
+  budgetRefunded  Boolean           @default(false)
+
+  @@unique([jobId, seekerId])
+  @@index([seekerId, submittedAt])
+  @@index([jobId, status])
+}
+
+model ApplicationBudgetEntry {
+  id            String   @id @default(cuid())
+  seekerId      String
+  seeker        User     @relation(fields: [seekerId], references: [id], onDelete: Cascade)
+  applicationId String?
+  delta         Int // -1 spend, +1 refund
+  createdAt     DateTime @default(now())
+
+  @@index([seekerId, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String? // null for system/cron actions
+  action     String // e.g. "application.submit", "user.ban", "job.reopen"
+  targetType String // "Application" | "User" | "Job" | ...
+  targetId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
+}
