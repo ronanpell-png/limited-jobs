@@ -65,7 +65,7 @@ the budget and the cap.
 1. Create a Neon (or Supabase) Postgres and set `DATABASE_URL`.
 2. `npx prisma migrate deploy` against production.
 3. Import the repo in Vercel; set all env vars from `.env.example`.
-4. Set `CRON_SECRET` — Vercel Cron (configured in `vercel.json`, hourly) sends it automatically.
+4. Set `CRON_SECRET` — Vercel Cron (configured in `vercel.json`: hourly job autopause, daily digest email) sends it automatically.
 5. Point the Clerk webhook at the production URL.
 6. Optional: set `UPSTASH_REDIS_REST_URL/TOKEN` for distributed rate limiting
    (falls back to in-memory per instance when unset).
