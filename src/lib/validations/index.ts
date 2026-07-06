@@ -26,8 +26,10 @@ export const applySchema = z.object({
   jobId: z.string().cuid(),
   intentStatement: intentStatementSchema,
   idempotencyKey: z.string().uuid(),
-  // Honeypot: real users never fill this hidden field.
-  website: z.string().max(0).optional().or(z.literal("")),
+  // Honeypot: real users never fill this hidden field. The schema must
+  // ACCEPT any value here — filled values are detected in the action and
+  // answered with a fake success, never a validation error.
+  website: z.string().max(200).optional().default(""),
 });
 
 export const seekerOnboardingSchema = z.object({

@@ -74,8 +74,28 @@ export async function POST(req: Request) {
   }
 
   if (event.type === "user.deleted") {
-    // Cascade deletes profile, applications, budget entries.
-    await db.user.deleteMany({ where: { clerkId: event.data.id } });
+    const user = await db.user.findUnique({
+      where: { clerkId: event.data.id },
+      select: { id: true },
+    });
+    if (user) {
+      await db.$transaction(async (tx) => {
+        // Cascade delete removes application rows, so release their job cap
+        // slots first — otherwise jobs over-count phantom applicants forever.
+        const active = await tx.application.groupBy({
+          by: ["jobId"],
+          where: { seekerId: user.id, status: { not: "WITHDRAWN" } },
+          _count: true,
+        });
+        for (const { jobId, _count } of active) {
+          await tx.$executeRaw`
+            UPDATE "JobCapState"
+            SET "applicationCount" = GREATEST("applicationCount" - ${_count}, 0)
+            WHERE "jobId" = ${jobId}`;
+        }
+        await tx.user.delete({ where: { id: user.id } });
+      });
+    }
   }
 
   return NextResponse.json({ ok: true });

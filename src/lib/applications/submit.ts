@@ -140,6 +140,11 @@ export async function withdrawApplication(params: {
   const { applicationId, seekerId } = params;
 
   return db.$transaction(async (tx) => {
+    // Lock the application row so concurrent withdrawals serialize —
+    // without this, two racing requests could both see budgetRefunded=false
+    // and refund twice.
+    await tx.$queryRaw`SELECT "id" FROM "Application" WHERE "id" = ${applicationId} FOR UPDATE`;
+
     const application = await tx.application.findUnique({
       where: { id: applicationId },
     });

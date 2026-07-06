@@ -97,10 +97,14 @@ export async function applyToJob(formData: FormData): Promise<ActionResult> {
     await enforceRateLimit("apply_user", user.id);
     await enforceRateLimit("apply_ip", await clientIp());
 
+    // Note: never call redirect() inside this try — Next.js redirects work
+    // by throwing, and the catch below would swallow them.
     const profile = await db.seekerProfile.findUnique({
       where: { userId: user.id },
     });
-    if (!profile) redirect("/onboarding");
+    if (!profile) {
+      return { ok: false, error: "Complete your profile before applying" };
+    }
 
     await submitApplication({
       jobId: parsed.data.jobId,
