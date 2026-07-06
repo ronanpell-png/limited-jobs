@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { differenceInDays, formatDistanceToNow } from "date-fns";
 import { db } from "@/lib/db";
 import { currentDbUser } from "@/lib/auth/session";
-import { getRemainingBudget } from "@/lib/applications/budget";
+import { getBudgetHistory, getRemainingBudget } from "@/lib/applications/budget";
 import { REFUND_ELIGIBLE_DAYS } from "@/lib/config";
 import { BudgetMeter } from "@/components/shared/BudgetMeter";
 import { CapBadge } from "@/components/shared/CapBadge";
@@ -24,8 +24,9 @@ export default async function DashboardPage() {
   });
   if (!profile) redirect("/onboarding");
 
-  const [budget, applications, savedJobs] = await Promise.all([
+  const [budget, history, applications, savedJobs] = await Promise.all([
     getRemainingBudget(user.id),
+    getBudgetHistory(user.id),
     db.application.findMany({
       where: { seekerId: user.id },
       include: { job: { include: { company: true } } },
@@ -74,6 +75,56 @@ export default async function DashboardPage() {
           >
             Browse open roles
           </Link>
+
+          {history.length > 0 && (
+            <div className="mt-4 rounded-lg border border-stone-200 bg-white p-4">
+              <h2 className="text-sm font-medium text-stone-700">
+                Budget activity
+              </h2>
+              <ul className="mt-3 space-y-2.5">
+                {history.map((entry) => {
+                  const freesInFuture =
+                    entry.freesAt && entry.freesAt > new Date();
+                  return (
+                    <li key={entry.id} className="text-xs">
+                      <div className="flex items-start gap-2">
+                        <span
+                          className={`shrink-0 font-semibold tabular-nums ${
+                            entry.delta < 0
+                              ? "text-stone-500"
+                              : "text-emerald-600"
+                          }`}
+                        >
+                          {entry.delta < 0 ? "−1" : "+1"}
+                        </span>
+                        <span className="min-w-0 text-stone-600">
+                          {entry.delta < 0 ? "Applied" : "Refund"}
+                          {entry.jobTitle && entry.jobId ? (
+                            <>
+                              {" — "}
+                              <Link
+                                href={`/jobs/${entry.jobId}`}
+                                className="hover:text-indigo-600"
+                              >
+                                {entry.jobTitle}
+                              </Link>
+                            </>
+                          ) : null}
+                          <span className="block text-stone-400">
+                            {formatDistanceToNow(entry.createdAt, {
+                              addSuffix: true,
+                            })}
+                            {freesInFuture &&
+                              ` · slot frees ${formatDistanceToNow(entry.freesAt!, { addSuffix: true })}`}
+                          </span>
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </div>
 
         <div className="md:col-span-2 space-y-3">

@@ -4,6 +4,7 @@ import { formatDistanceToNow } from "date-fns";
 import { db } from "@/lib/db";
 import { currentDbUser } from "@/lib/auth/session";
 import { getRemainingBudget } from "@/lib/applications/budget";
+import { getCompanyResponseRate } from "@/lib/companies/response-rate";
 import { CapBadge } from "@/components/shared/CapBadge";
 import { ApplyForm } from "@/components/seeker/ApplyForm";
 import { SaveJobButton } from "@/components/seeker/SaveJobButton";
@@ -22,7 +23,10 @@ export default async function JobDetailPage({
   });
   if (!job || job.status === "DRAFT") notFound();
 
-  const user = await currentDbUser();
+  const [user, responseRate] = await Promise.all([
+    currentDbUser(),
+    getCompanyResponseRate(job.companyId),
+  ]);
   const isSeeker = user?.role === "SEEKER";
 
   const existing = isSeeker
@@ -91,6 +95,17 @@ export default async function JobDetailPage({
         </span>
         <span>·</span>
         <span>{job.employmentType}</span>
+        {typeof responseRate === "number" && (
+          <>
+            <span>·</span>
+            <span
+              className={responseRate >= 70 ? "text-emerald-600" : undefined}
+              title="Share of applications this company has responded to"
+            >
+              Responds to {responseRate}% of applicants
+            </span>
+          </>
+        )}
         {job.closesAt && acceptingApplications && (
           <>
             <span>·</span>

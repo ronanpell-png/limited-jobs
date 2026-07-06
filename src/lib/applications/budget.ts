@@ -47,6 +47,55 @@ export async function getRemainingBudget(
   return { limit: BUDGET_LIMIT, used, remaining, nextSlotAt };
 }
 
+export type BudgetHistoryItem = {
+  id: string;
+  delta: number;
+  createdAt: Date;
+  jobId: string | null;
+  jobTitle: string | null;
+  /** When this spend rotates out of the window (null for refunds / expired). */
+  freesAt: Date | null;
+};
+
+/** Recent ledger entries with job context, newest first. */
+export async function getBudgetHistory(
+  seekerId: string,
+  limit = 12
+): Promise<BudgetHistoryItem[]> {
+  const entries = await db.applicationBudgetEntry.findMany({
+    where: { seekerId },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+
+  const appIds = entries
+    .map((e) => e.applicationId)
+    .filter((id): id is string => Boolean(id));
+  const apps = appIds.length
+    ? await db.application.findMany({
+        where: { id: { in: appIds } },
+        select: { id: true, jobId: true, job: { select: { title: true } } },
+      })
+    : [];
+  const byId = new Map(apps.map((a) => [a.id, a]));
+
+  const windowStart = subDays(new Date(), BUDGET_WINDOW_DAYS);
+  return entries.map((e) => {
+    const app = e.applicationId ? byId.get(e.applicationId) : undefined;
+    return {
+      id: e.id,
+      delta: e.delta,
+      createdAt: e.createdAt,
+      jobId: app?.jobId ?? null,
+      jobTitle: app?.job.title ?? null,
+      freesAt:
+        e.delta < 0 && e.createdAt >= windowStart
+          ? addDays(e.createdAt, BUDGET_WINDOW_DAYS)
+          : null,
+    };
+  });
+}
+
 /**
  * Spend one application credit. MUST be called inside a transaction that
  * has locked the seeker's user row (see submitApplication) — otherwise

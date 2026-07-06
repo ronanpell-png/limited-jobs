@@ -2,6 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { currentDbUser } from "@/lib/auth/session";
 import { JobCard, type JobCardData } from "@/components/shared/JobCard";
+import { getCompanyResponseRates } from "@/lib/companies/response-rate";
 import { jobSearchSchema } from "@/lib/validations";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { clientIp } from "@/lib/request";
@@ -15,8 +16,12 @@ type JobWithRelations = Job & {
   capState: JobCapState | null;
 };
 
-function toCardData(job: JobWithRelations): JobCardData {
+function toCardData(
+  job: JobWithRelations,
+  responseRate: number | null
+): JobCardData {
   return {
+    responseRate,
     id: job.id,
     title: job.title,
     companyName: job.company.name,
@@ -74,6 +79,9 @@ export default async function JobsPage({
   ]);
 
   const isSeeker = user?.role === "SEEKER";
+  const responseRates = await getCompanyResponseRates(
+    jobs.map((j) => j.companyId)
+  );
   const savedIds = isSeeker
     ? new Set(
         (
@@ -143,7 +151,7 @@ export default async function JobsPage({
         {open.map((job) => (
           <JobCard
             key={job.id}
-            job={toCardData(job)}
+            job={toCardData(job, responseRates.get(job.companyId) ?? null)}
             showSaveButton={isSeeker}
             initialSaved={savedIds.has(job.id)}
           />
@@ -163,7 +171,7 @@ export default async function JobsPage({
             {capped.map((job) => (
               <JobCard
                 key={job.id}
-                job={toCardData(job)}
+                job={toCardData(job, responseRates.get(job.companyId) ?? null)}
                 showSaveButton={isSeeker}
                 initialSaved={savedIds.has(job.id)}
               />

@@ -61,6 +61,23 @@ export function newApplicationEmail(params: {
   };
 }
 
+export function dailyDigestEmail(params: {
+  jobs: { id: string; title: string; companyName: string }[];
+}): { subject: string; text: string } {
+  const { jobs } = params;
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const lines = jobs
+    .map((j) => `• ${j.title} at ${j.companyName}\n  ${base}/jobs/${j.id}`)
+    .join("\n\n");
+  return {
+    subject: `${jobs.length} new role${jobs.length === 1 ? "" : "s"} matching your skills`,
+    text:
+      `New on Limited in the last 24 hours — roles that match your profile:\n\n${lines}` +
+      `\n\nRoles pause at 50 applicants, so the earlier you look, the more room there is.` +
+      `\n\nBrowse all roles: ${base}/jobs`,
+  };
+}
+
 export function jobCapReachedEmail(params: {
   jobTitle: string;
   cap: number;

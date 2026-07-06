@@ -17,6 +17,8 @@ export type JobCardData = {
   applicationCount: number;
   maxApplications: number;
   isPaused: boolean;
+  /** Company response rate 0–100; null when there's not enough data. */
+  responseRate?: number | null;
 };
 
 function salaryLabel(min: number | null, max: number | null): string | null {
@@ -99,6 +101,18 @@ export function JobCard({
             <span>·</span>
             <span>
               Posted {formatDistanceToNow(job.publishedAt, { addSuffix: true })}
+            </span>
+          </>
+        )}
+        {typeof job.responseRate === "number" && (
+          <>
+            <span>·</span>
+            <span
+              className={
+                job.responseRate >= 70 ? "text-emerald-600" : undefined
+              }
+            >
+              Responds to {job.responseRate}% of applicants
             </span>
           </>
         )}
