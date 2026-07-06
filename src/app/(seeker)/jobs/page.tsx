@@ -1,11 +1,37 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
-import { JobCard } from "@/components/shared/JobCard";
+import { currentDbUser } from "@/lib/auth/session";
+import { JobCard, type JobCardData } from "@/components/shared/JobCard";
 import { jobSearchSchema } from "@/lib/validations";
 import { checkRateLimit } from "@/lib/security/rate-limit";
 import { clientIp } from "@/lib/request";
+import type { Job, Company, JobCapState } from "@prisma/client";
 
 export const metadata = { title: "Open roles — Limited" };
 export const dynamic = "force-dynamic";
+
+type JobWithRelations = Job & {
+  company: Company;
+  capState: JobCapState | null;
+};
+
+function toCardData(job: JobWithRelations): JobCardData {
+  return {
+    id: job.id,
+    title: job.title,
+    companyName: job.company.name,
+    locationType: job.locationType,
+    location: job.location,
+    employmentType: job.employmentType,
+    salaryMin: job.salaryMin,
+    salaryMax: job.salaryMax,
+    description: job.description,
+    publishedAt: job.publishedAt,
+    applicationCount: job.capState?.applicationCount ?? 0,
+    maxApplications: job.maxApplications,
+    isPaused: job.capState?.isPaused ?? false,
+  };
+}
 
 export default async function JobsPage({
   searchParams,
@@ -24,24 +50,43 @@ export default async function JobsPage({
   const raw = await searchParams;
   const parsed = jobSearchSchema.safeParse(raw);
   const { q, locationType } = parsed.success ? parsed.data : {};
+  const hasFilters = Boolean(q || locationType);
 
-  const jobs = await db.job.findMany({
-    where: {
-      status: { in: ["OPEN", "PAUSED"] },
-      ...(locationType ? { locationType } : {}),
-      ...(q
-        ? {
-            OR: [
-              { title: { contains: q, mode: "insensitive" } },
-              { company: { name: { contains: q, mode: "insensitive" } } },
-            ],
-          }
-        : {}),
-    },
-    include: { company: true, capState: true },
-    orderBy: { publishedAt: "desc" },
-    take: 50,
-  });
+  const [user, jobs] = await Promise.all([
+    currentDbUser(),
+    db.job.findMany({
+      where: {
+        status: { in: ["OPEN", "PAUSED"] },
+        ...(locationType ? { locationType } : {}),
+        ...(q
+          ? {
+              OR: [
+                { title: { contains: q, mode: "insensitive" } },
+                { company: { name: { contains: q, mode: "insensitive" } } },
+              ],
+            }
+          : {}),
+      },
+      include: { company: true, capState: true },
+      orderBy: { publishedAt: "desc" },
+      take: 50,
+    }),
+  ]);
+
+  const isSeeker = user?.role === "SEEKER";
+  const savedIds = isSeeker
+    ? new Set(
+        (
+          await db.savedJob.findMany({
+            where: { seekerId: user!.id },
+            select: { jobId: true },
+          })
+        ).map((s) => s.jobId)
+      )
+    : new Set<string>();
+
+  const open = jobs.filter((j) => !j.capState?.isPaused && j.status === "OPEN");
+  const capped = jobs.filter((j) => j.capState?.isPaused || j.status !== "OPEN");
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -76,31 +121,56 @@ export default async function JobsPage({
         </button>
       </form>
 
-      <div className="mt-6 space-y-3">
-        {jobs.length === 0 && (
+      <div className="mt-6 flex items-center justify-between text-sm text-stone-500">
+        <span>
+          {open.length} open role{open.length === 1 ? "" : "s"}
+          {hasFilters && " match"}
+          {capped.length > 0 && ` · ${capped.length} recently capped`}
+        </span>
+        {hasFilters && (
+          <Link href="/jobs" className="text-indigo-600 hover:underline">
+            Clear filters
+          </Link>
+        )}
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {open.length === 0 && (
           <p className="py-12 text-center text-sm text-stone-500">
             No open roles match — check back soon, new roles post weekly.
           </p>
         )}
-        {jobs.map((job) => (
+        {open.map((job) => (
           <JobCard
             key={job.id}
-            job={{
-              id: job.id,
-              title: job.title,
-              companyName: job.company.name,
-              locationType: job.locationType,
-              location: job.location,
-              employmentType: job.employmentType,
-              salaryMin: job.salaryMin,
-              salaryMax: job.salaryMax,
-              applicationCount: job.capState?.applicationCount ?? 0,
-              maxApplications: job.maxApplications,
-              isPaused: job.capState?.isPaused ?? false,
-            }}
+            job={toCardData(job)}
+            showSaveButton={isSeeker}
+            initialSaved={savedIds.has(job.id)}
           />
         ))}
       </div>
+
+      {capped.length > 0 && (
+        <div className="mt-10">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-stone-400">
+            Recently capped
+          </h2>
+          <p className="mt-1 text-xs text-stone-500">
+            These roles hit their applicant limit. Save one and check back —
+            employers can reopen with one click.
+          </p>
+          <div className="mt-3 space-y-3">
+            {capped.map((job) => (
+              <JobCard
+                key={job.id}
+                job={toCardData(job)}
+                showSaveButton={isSeeker}
+                initialSaved={savedIds.has(job.id)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

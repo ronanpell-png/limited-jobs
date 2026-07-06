@@ -1,3 +1,10 @@
+/**
+ * Applicant-cap badge with escalating urgency:
+ *   < 50% full  — quiet gray (no urgency, don't compete with the title)
+ *   50–79%      — indigo ("filling up")
+ *   >= 80%      — amber ("almost full")
+ *   paused      — stone ("limit reached")
+ */
 export function CapBadge({
   count,
   max,
@@ -14,14 +21,24 @@ export function CapBadge({
       </span>
     );
   }
-  const nearCap = count >= max * 0.8;
+
+  const ratio = max > 0 ? count / max : 0;
+  const style =
+    ratio >= 0.8
+      ? "bg-amber-50 text-amber-700"
+      : ratio >= 0.5
+        ? "bg-indigo-50 text-indigo-700"
+        : "bg-stone-50 text-stone-500";
+  const label =
+    ratio >= 0.8
+      ? `${max - count} spot${max - count === 1 ? "" : "s"} left`
+      : `${count}/${max} spots filled`;
+
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-        nearCap ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"
-      }`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${style}`}
     >
-      {count}/{max} spots filled
+      {label}
     </span>
   );
 }

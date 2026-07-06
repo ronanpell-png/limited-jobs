@@ -6,6 +6,7 @@ import { currentDbUser } from "@/lib/auth/session";
 import { getRemainingBudget } from "@/lib/applications/budget";
 import { REFUND_ELIGIBLE_DAYS } from "@/lib/config";
 import { BudgetMeter } from "@/components/shared/BudgetMeter";
+import { CapBadge } from "@/components/shared/CapBadge";
 import { StatusChip } from "@/components/shared/StatusChip";
 import { WithdrawButton } from "@/components/seeker/WithdrawButton";
 
@@ -23,14 +24,32 @@ export default async function DashboardPage() {
   });
   if (!profile) redirect("/onboarding");
 
-  const [budget, applications] = await Promise.all([
+  const [budget, applications, savedJobs] = await Promise.all([
     getRemainingBudget(user.id),
     db.application.findMany({
       where: { seekerId: user.id },
       include: { job: { include: { company: true } } },
       orderBy: { submittedAt: "desc" },
     }),
+    db.savedJob.findMany({
+      where: { seekerId: user.id },
+      include: {
+        job: { include: { company: true, capState: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
+
+  const counts = {
+    sent: applications.filter((a) => a.status !== "WITHDRAWN").length,
+    viewed: applications.filter(
+      (a) => a.status === "VIEWED" || a.status === "SHORTLISTED" || a.status === "HIRED"
+    ).length,
+    shortlisted: applications.filter(
+      (a) => a.status === "SHORTLISTED" || a.status === "HIRED"
+    ).length,
+    hired: applications.filter((a) => a.status === "HIRED").length,
+  };
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -58,6 +77,26 @@ export default async function DashboardPage() {
         </div>
 
         <div className="md:col-span-2 space-y-3">
+          {counts.sent > 0 && (
+            <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-lg border border-stone-200 bg-white px-4 py-3 text-sm text-stone-600">
+              <span>
+                <strong className="text-stone-900">{counts.sent}</strong> sent
+              </span>
+              <span>
+                <strong className="text-stone-900">{counts.viewed}</strong>{" "}
+                viewed
+              </span>
+              <span>
+                <strong className="text-stone-900">{counts.shortlisted}</strong>{" "}
+                shortlisted
+              </span>
+              {counts.hired > 0 && (
+                <span className="text-emerald-700">
+                  <strong>{counts.hired}</strong> hired
+                </span>
+              )}
+            </div>
+          )}
           {applications.length === 0 && (
             <div className="rounded-lg border border-dashed border-stone-300 p-8 text-center text-sm text-stone-500">
               No applications yet. You have {budget.remaining} ready to spend —
@@ -109,6 +148,47 @@ export default async function DashboardPage() {
           })}
         </div>
       </div>
+
+      {savedJobs.length > 0 && (
+        <div className="mt-10">
+          <h2 className="text-lg font-semibold">Saved jobs</h2>
+          <p className="mt-1 text-sm text-stone-600">
+            Your shortlist — saving is free, applying spends a credit.
+          </p>
+          <div className="mt-4 space-y-3">
+            {savedJobs.map(({ id, job }) => {
+              const applied = applications.some((a) => a.jobId === job.id);
+              return (
+                <div
+                  key={id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 bg-white p-4"
+                >
+                  <div className="min-w-0">
+                    <Link
+                      href={`/jobs/${job.id}`}
+                      className="font-medium hover:text-indigo-600"
+                    >
+                      {job.title}
+                    </Link>
+                    <p className="text-sm text-stone-600">{job.company.name}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    {applied ? (
+                      <span className="text-xs text-stone-500">Applied</span>
+                    ) : (
+                      <CapBadge
+                        count={job.capState?.applicationCount ?? 0}
+                        max={job.maxApplications}
+                        isPaused={job.capState?.isPaused ?? false}
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

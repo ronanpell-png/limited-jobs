@@ -59,6 +59,7 @@ model User {
   budgetEntries      ApplicationBudgetEntry[]
   companyMemberships CompanyMember[]
   sentInvites        EmployerInvite[]
+  savedJobs          SavedJob[]
 }
 
 model SeekerProfile {
@@ -143,9 +144,23 @@ model Job {
   updatedAt       DateTime      @updatedAt
   applications    Application[]
   capState        JobCapState?
+  savedBy         SavedJob[]
 
   @@index([status, publishedAt])
   @@index([companyId])
+}
+
+// A seeker's shortlist: park a job while deciding whether it's worth a credit.
+model SavedJob {
+  id        String   @id @default(cuid())
+  seekerId  String
+  jobId     String
+  seeker    User     @relation(fields: [seekerId], references: [id], onDelete: Cascade)
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([seekerId, jobId])
+  @@index([seekerId, createdAt])
 }
 
 model JobCapState {

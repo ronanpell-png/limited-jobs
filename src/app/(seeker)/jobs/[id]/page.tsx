@@ -6,6 +6,7 @@ import { currentDbUser } from "@/lib/auth/session";
 import { getRemainingBudget } from "@/lib/applications/budget";
 import { CapBadge } from "@/components/shared/CapBadge";
 import { ApplyForm } from "@/components/seeker/ApplyForm";
+import { SaveJobButton } from "@/components/seeker/SaveJobButton";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,13 @@ export default async function JobDetailPage({
         where: { jobId_seekerId: { jobId: id, seekerId: user!.id } },
       })
     : null;
+  const saved = isSeeker
+    ? Boolean(
+        await db.savedJob.findUnique({
+          where: { seekerId_jobId: { seekerId: user!.id, jobId: id } },
+        })
+      )
+    : false;
   const budget = isSeeker ? await getRemainingBudget(user!.id) : null;
   const hasProfile = isSeeker
     ? Boolean(
@@ -65,11 +73,14 @@ export default async function JobDetailPage({
             )}
           </p>
         </div>
-        <CapBadge
-          count={job.capState?.applicationCount ?? 0}
-          max={job.maxApplications}
-          isPaused={job.capState?.isPaused ?? false}
-        />
+        <div className="flex shrink-0 items-center gap-1">
+          <CapBadge
+            count={job.capState?.applicationCount ?? 0}
+            max={job.maxApplications}
+            isPaused={job.capState?.isPaused ?? false}
+          />
+          {isSeeker && <SaveJobButton jobId={job.id} initialSaved={saved} />}
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 text-sm text-stone-500">

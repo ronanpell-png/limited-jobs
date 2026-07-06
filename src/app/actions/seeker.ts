@@ -146,6 +146,42 @@ export async function applyToJob(formData: FormData): Promise<ActionResult> {
   }
 }
 
+/** Save/unsave a job on the seeker's shortlist. Costs nothing. */
+export async function toggleSaveJob(
+  jobId: string
+): Promise<ActionResult & { saved?: boolean }> {
+  try {
+    const user = await requireRole("SEEKER");
+
+    const job = await db.job.findUnique({
+      where: { id: jobId },
+      select: { id: true, status: true },
+    });
+    if (!job || job.status === "DRAFT") {
+      return { ok: false, error: "Job not found" };
+    }
+
+    const existing = await db.savedJob.findUnique({
+      where: { seekerId_jobId: { seekerId: user.id, jobId } },
+    });
+    let saved: boolean;
+    if (existing) {
+      await db.savedJob.delete({ where: { id: existing.id } });
+      saved = false;
+    } else {
+      await db.savedJob.create({ data: { seekerId: user.id, jobId } });
+      saved = true;
+    }
+
+    revalidatePath("/jobs");
+    revalidatePath(`/jobs/${jobId}`);
+    revalidatePath("/dashboard");
+    return { ok: true, saved };
+  } catch (err) {
+    return { ok: false, error: toSafeMessage(err) };
+  }
+}
+
 /** Withdraw an application (refund handled by the engine). */
 export async function withdrawMyApplication(
   applicationId: string

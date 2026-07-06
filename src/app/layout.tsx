@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { ClerkProvider } from "@clerk/nextjs";
 import Link from "next/link";
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import { NavBudgetPill } from "@/components/shared/NavBudgetPill";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -52,6 +54,9 @@ export default function RootLayout({
                   </Link>
                 </SignedOut>
                 <SignedIn>
+                  <Suspense fallback={null}>
+                    <NavBudgetPill />
+                  </Suspense>
                   <Link
                     href="/dashboard"
                     className="text-sm text-stone-600 hover:text-stone-900"

@@ -72,9 +72,18 @@ export function ApplyForm({
           placeholder="Be specific — the hiring team reads every one of these."
           className="mt-1 w-full rounded-md border border-stone-300 p-3 text-sm focus:border-indigo-500 focus:outline-none"
         />
-        <p className="mt-1 text-xs text-stone-500">
-          {intent.length}/{INTENT_MAX_LENGTH} characters (minimum{" "}
-          {INTENT_MIN_LENGTH})
+        <p
+          className={`mt-1 text-xs ${
+            intent.length === 0
+              ? "text-stone-500"
+              : intent.trim().length < INTENT_MIN_LENGTH
+                ? "text-amber-600"
+                : "text-emerald-600"
+          }`}
+        >
+          {intent.trim().length < INTENT_MIN_LENGTH
+            ? `${intent.length}/${INTENT_MAX_LENGTH} characters — at least ${INTENT_MIN_LENGTH} needed. Write it fresh: copy-pasted statements are rejected.`
+            : `${intent.length}/${INTENT_MAX_LENGTH} characters — ready to send`}
         </p>
       </div>
 
